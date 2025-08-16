@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dự đoán nguy cơ bỏ học</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Dự đoán nguy cơ bỏ học</h1>
+        
+        <!-- Combined Prediction Forms -->
+        <div class="prediction-container">
+            <!-- Single Prediction Form -->
+            <div class="prediction-section">
+                <h2>Dự đoán đơn lẻ</h2>
+                <form id="singlePredictForm">
+                    <div class="form-group">
+                        <label for="diem_tb">Điểm trung bình:</label>
+                        <input type="number" id="diem_tb" name="diem_tb" step="0.1" min="0" max="10" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="tin_chi_rot">Số tín chỉ rớt:</label>
+                        <input type="number" id="tin_chi_rot" name="tin_chi_rot" min="0" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="so_mon_hoc_lai">Số môn học lại:</label>
+                        <input type="number" id="so_mon_hoc_lai" name="so_mon_hoc_lai" min="0" required>
+                    </div>
+                    
+                    <button type="submit">Dự đoán</button>
+                </form>
+                <div id="singleResult" class="result"></div>
+            </div>
+            
+            <!-- Batch Prediction -->
+            <div class="prediction-section">
+                <h2>Dự đoán theo lô (Upload file Excel)</h2>
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="form-group">
+                        <label for="file">Chọn file Excel:</label>
+                        <input type="file" id="file" name="file" accept=".xlsx,.xls" required>
+                    </div>
+                    <button type="submit">Upload và dự đoán</button>
+                </form>
+                <div id="uploadResult" class="result"></div>
+            </div>
+        </div>
+        
+        <div id="statistics" class="statistics-section" style="display: none;">
+            <h3>Thống kê từ file Excel</h3>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <span class="stat-label">Tổng số sinh viên:</span>
+                    <span class="stat-value" id="totalStudents">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Điểm trung bình:</span>
+                    <span class="stat-value" id="averageScore">0.0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Tỷ lệ sinh viên bỏ học:</span>
+                    <span class="stat-value" id="dropoutRate">0%</span>
+                </div>
+            </div>
+        </div>
+        <div id="resultsTable"></div>
+        
+        <!-- Thêm section cho biểu đồ -->
+        <div class="chart-section">
+            <h3>Thống kê tỷ lệ bỏ học theo lớp</h3>
+            <canvas id="dropoutChart"></canvas>
+        </div>
+    </div>
+
+    <script>
+        let currentDisplayLimit = 10;
+        const increment = 5;
+        let allResultsData = [];
+
+        // Single prediction
+        document.getElementById('singlePredictForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = {
+                diem_tb: document.getElementById('diem_tb').value,
+                tin_chi_rot: document.getElementById('tin_chi_rot').value,
+                so_mon_hoc_lai: document.getElementById('so_mon_hoc_lai').value
+            };
+            
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(formData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    document.getElementById('singleResult').innerHTML = `<p class="error">Lỗi: ${result.error}</p>`;
+                } else {
+                    const prediction = result.prediction === 1 ? 'Có nguy cơ bỏ học' : 'Không có nguy cơ bỏ học';
+                    const probability = result.dropout_probability;
+                    document.getElementById('singleResult').innerHTML = `
+                        <p>Kết quả: ${prediction}</p>
+                        <p>Xác suất bỏ học: ${probability}%</p>
+                    `;
+                }
+            } catch (error) {
+                document.getElementById('singleResult').innerHTML = `<p class="error">Lỗi kết nối: ${error.message}</p>`;
+            }
+        });
+
+        // Batch prediction
+        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            formData.append('file', document.getElementById('file').files[0]);
+            
+            try {
+                const response = await fetch('/upload_predict', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (result.error) {
+                    document.getElementById('uploadResult').innerHTML = `<p class="error">Lỗi: ${result.error}</p>`;
+                } else {
+                    displayResults(result.results);
+                }
+            } catch (error) {
+                document.getElementById('uploadResult').innerHTML = `<p class="error">Lỗi kết nối: ${error.message}</p>`;
+            }
+        });
+
+        let dropoutChart = null;
+
+        function updateDropoutChart(results) {
+            // Bước 1: Nhóm và đếm số lần xuất hiện của mỗi lớp duy nhất
+            const uniqueClasses = [...new Set(results.map(student => student.Lop))].sort();
+            
+            // Bước 2: Tính toán thống kê cho mỗi lớp
+            const chartData = uniqueClasses.map(className => {
+                const studentsInClass = results.filter(student => student.Lop === className);
+                const dropoutCount = studentsInClass.filter(student => student.prediction === 1).length;
+                const dropoutRate = (dropoutCount / studentsInClass.length * 100).toFixed(2);
+                
+                return {
+                    className,
+                    dropoutRate: parseFloat(dropoutRate)
+                };
+            });
+
+            // Bước 3: Hủy biểu đồ cũ nếu tồn tại
+            if (dropoutChart) {
+                dropoutChart.destroy();
+            }
+
+            // Bước 4: Tạo biểu đồ mới
+            const ctx = document.getElementById('dropoutChart').getContext('2d');
+            dropoutChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: chartData.map(item => item.className),
+                    datasets: [{
+                        label: 'Tỷ lệ sinh viên bỏ học (%)',
+                        data: chartData.map(item => item.dropoutRate),
+                        backgroundColor: 'rgba(255, 99, 132, 0.8)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.1)'
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Biểu Đồ Tỷ Lệ Sinh Viên Bỏ Học Theo Lớp',
+                            font: {
+                                size: 16,
+                                weight: 'bold'
+                            },
+                            padding: 20
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Tỷ lệ bỏ học: ${context.raw}%`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // In thống kê chi tiết ra console để kiểm tra
+            console.log('Thống kê theo số lần xuất hiện của lớp:', chartData);
+        }
+
+        // Thêm vào phần script, sau phần event listeners
+
+        function displayResults(results) {
+            allResultsData = results;
+            currentDisplayLimit = 10;
+            
+            // Tính toán thống kê
+            const totalStudents = results.length;
+            const averageScore = results.reduce((sum, student) => sum + parseFloat(student.DiemTB || 0), 0) / totalStudents;
+            const dropoutCount = results.filter(student => student.prediction === 1).length;
+            const dropoutRate = ((dropoutCount / totalStudents) * 100).toFixed(2);
+
+            // Hiện và cập nhật phần thống kê
+            const statisticsElement = document.getElementById('statistics');
+            statisticsElement.style.display = 'block';
+            
+            document.getElementById('totalStudents').textContent = totalStudents;
+            document.getElementById('averageScore').textContent = averageScore.toFixed(2);
+            document.getElementById('dropoutRate').textContent = `${dropoutRate}%`;
+
+            // Hiển thị bảng kết quả và cập nhật biểu đồ
+            renderResults(results);
+            updateDropoutChart(results);
+        }
+
+        function renderResults(results) {
+            const tableDiv = document.getElementById('resultsTable');
+            let html = '<table><thead><tr><th>STT</th><th>Mã SV</th><th>Họ Tên</th><th>Điểm TB</th><th>Dự đoán</th><th>Xác suất bỏ học</th></tr></thead><tbody>';
+
+            const displayResults = results.slice(0, currentDisplayLimit);
+
+            displayResults.forEach(result => {
+                html += `
+                    <tr>
+                        <td>${result.stt}</td>
+                        <td>${result.masv}</td>
+                        <td>${result.hoten}</td>
+                        <td>${result.DiemTB.toFixed(2)}</td>
+                        <td>${result.prediction === 1 ? 'Có nguy cơ' : 'Không có nguy cơ'}</td>
+                        <td>${result.dropout_probability.toFixed(2)}%</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+
+            // Thêm nút điều khiển
+            if (currentDisplayLimit > 10) {
+                html += `<button onclick="showLessResults()" class="show-less-btn">Ẩn bớt</button>`;
+            }
+            if (results.length > currentDisplayLimit) {
+                html += `<button onclick="showMoreResults()" class="show-more-btn">Xem thêm sinh viên</button>`;
+            }
+
+            tableDiv.innerHTML = html;
+        }
+
+        function showMoreResults() {
+            currentDisplayLimit += increment;
+            renderResults(allResultsData);
+        }
+
+        function showLessResults() {
+            currentDisplayLimit = 10;
+            renderResults(allResultsData);
+        }
+    </script>
+</body>
+</html>
