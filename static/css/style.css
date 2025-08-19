@@ -1,0 +1,264 @@
+/* style.css */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: #f5f5f5;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 0 10px rgba(0,0,0,0.1);
+}
+
+h1 {
+    text-align: center;
+    color: #333;
+    margin-bottom: 30px;
+}
+
+.prediction-container {
+    display: flex;
+    gap: 30px;
+    margin-bottom: 40px;
+}
+
+.prediction-section {
+    flex: 1;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background: white;
+}
+
+h2 {
+    color: #555;
+    margin-bottom: 20px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #555;
+}
+
+input[type="number"], input[type="file"] {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 16px;
+}
+
+button {
+    background-color: #007bff;
+    color: white;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+button:hover {
+    background-color: #0056b3;
+}
+
+.result {
+    margin-top: 20px;
+    padding: 15px;
+    border-radius: 5px;
+}
+
+.result p {
+    margin: 5px 0;
+    font-size: 16px;
+}
+
+.error {
+    color: #dc3545;
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+}
+
+th, td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+th {
+    background-color: #f8f9fa;
+    font-weight: bold;
+}
+
+tr:hover {
+    background-color: #f5f5f5;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .prediction-container {
+        flex-direction: column;
+    }
+    
+    .prediction-section {
+        margin-bottom: 20px;
+    }
+}
+.statistics-section {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 25px;
+    border-radius: 12px;
+    margin: 30px 0;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.statistics-section h3 {
+    color: #2c3e50;
+    font-size: 1.5em;
+    margin-bottom: 20px;
+    text-align: center;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 25px;
+    padding: 10px;
+}
+
+.stat-item {
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+    text-align: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+
+.stat-item:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+}
+
+.stat-label {
+    display: block;
+    color: #6c757d;
+    font-size: 0.95em;
+    font-weight: 500;
+    margin-bottom: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-value {
+    display: block;
+    font-size: 1.8em;
+    font-weight: 700;
+    color: #3498db;
+    margin-top: 5px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .stats-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .statistics-section {
+        padding: 15px;
+        margin: 20px 0;
+    }
+    
+    .stat-value {
+        font-size: 1.5em;
+    }
+}
+
+/* Custom colors for each stat */
+.stat-item:nth-child(1) .stat-value {
+    color: #2ecc71; /* xanh lá */
+}
+
+.stat-item:nth-child(2) .stat-value {
+    color: #e74c3c; /* đỏ */
+}
+
+.stat-item:nth-child(3) .stat-value {
+    color: #f39c12; /* cam */
+}
+
+.show-more-btn, .show-less-btn {
+    display: inline-block;
+    margin: 20px 10px;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background-color 0.3s;
+}
+
+.show-more-btn {
+    background-color: #007bff;
+    color: white;
+}
+
+.show-less-btn {
+    background-color: #6c757d;
+    color: white;
+}
+
+.show-more-btn:hover {
+    background-color: #0056b3;
+}
+
+.show-less-btn:hover {
+    background-color: #545b62;
+}
+
+.chart-section {
+    margin-top: 40px;
+    padding: 20px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.chart-section h3 {
+    color: #333;
+    font-size: 18px;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+#dropoutChart {
+    width: 100% !important;
+    height: 400px !important;
+    margin: 0 auto;
+}
