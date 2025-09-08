@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chi Tiết Sinh Viên</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-primary">
+        <div class="container">
+            <span class="navbar-brand mb-0 h1">🎓 Chi Tiết Sinh Viên</span>
+            <a href="/" class="btn btn-light">← Quay lại</a>
+        </div>
+    </nav>
+
+    <div class="container mt-5">
+        <div id="loading" class="text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Đang tải...</span>
+            </div>
+        </div>
+
+        <div id="studentDetail" style="display: none;">
+            <h2>Thông Tin Chi Tiết Sinh Viên</h2>
+            
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h5 class="mb-0">Thông Tin Cơ Bản</h5>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-borderless">
+                                <tr>
+                                    <td><strong>Mã sinh viên:</strong></td>
+                                    <td id="masv"></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Họ tên:</strong></td>
+                                    <td id="hoten"></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Lớp:</strong></td>
+                                    <td id="lop"></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Khoa:</strong></td>
+                                    <td id="khoa"></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card">
+                        <div class="card-header bg-warning text-dark">
+                            <h5 class="mb-0">Kết Quả Dự Đoán</h5>
+                        </div>
+                        <div class="card-body">
+                            <table class="table table-borderless">
+                                <tr>
+                                    <td><strong>Điểm trung bình:</strong></td>
+                                    <td id="diem_tb"></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Số tín chỉ rớt:</strong></td>
+                                    <td id="tin_chi_rot"></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Số môn học lại:</strong></td>
+                                    <td id="so_mon_hoc_lai"></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Tỷ lệ bỏ học:</strong></td>
+                                    <td id="ty_le_bo_hoc_so"></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Đánh giá:</strong></td>
+                                    <td id="ty_le_bo_hoc_chu"></td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row mt-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header bg-info text-white">
+                            <h5 class="mb-0">Thông Tin Đầy Đủ Từ Excel</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="fullDetails" class="table-responsive">
+                                <!-- Dữ liệu đầy đủ sẽ được load động -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="error" class="alert alert-danger" style="display: none;">
+            <strong>Lỗi:</strong> <span id="errorMessage"></span>
+        </div>
+    </div>
+
+    <footer class="bg-light text-center py-3 mt-5">
+        <p class="mb-0">&copy; 2024 Hệ Thống Dự Đoán Sinh Viên Bỏ Học</p>
+    </footer>
+
+    <script>
+     // Lấy mã sinh viên từ URL
+function getStudentIdFromUrl() {
+    const path = window.location.pathname;
+    const parts = path.split('/');
+    return parts[parts.length - 1];
+}
+// Load thông tin sinh viên
+async function loadStudentDetail() {
+    const masv = getStudentIdFromUrl();
+    
+    try {
+        const response = await fetch(`/api/student/${masv}`); // Gọi API để lấy dữ liệu
+        const data = await response.json();
+        
+        if (data.error) {
+            showError(data.error);
+            return;
+        }
+        
+        displayStudentDetail(data);
+        
+    } catch (error) {
+        showError('Không thể tải thông tin sinh viên: ' + error.message);
+    }
+}
+
+        // Hiển thị thông tin sinh viên
+        function displayStudentDetail(student) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('studentDetail').style.display = 'block';
+
+            // Hiển thị thông tin cơ bản
+            document.getElementById('masv').textContent = student.masv || 'Không có';
+            document.getElementById('hoten').textContent = student.hoten || 'Không có';
+            document.getElementById('lop').textContent = student.lop || 'Không có';
+            document.getElementById('khoa').textContent = student.khoa || 'Không có';
+            
+            // Hiển thị kết quả dự đoán
+            document.getElementById('diem_tb').textContent = student.diem_tb || 0;
+            document.getElementById('tin_chi_rot').textContent = student.tin_chi_rot || 0;
+            document.getElementById('so_mon_hoc_lai').textContent = student.so_mon_hoc_lai || 0;
+            document.getElementById('ty_le_bo_hoc_so').textContent = student.ty_le_bo_hoc_so || '0%';
+            
+            const danhGia = document.getElementById('ty_le_bo_hoc_chu');
+            danhGia.textContent = student.ty_le_bo_hoc_chu || 'Không xác định';
+            danhGia.className = student.prediction === 1 ? 'text-danger fw-bold' : 'text-success fw-bold';
+
+            // Hiển thị thông tin đầy đủ từ Excel
+            displayFullDetails(student);
+        }
+
+        // Hiển thị tất cả thông tin từ Excel
+        function displayFullDetails(student) {
+            const fullDetails = document.getElementById('fullDetails');
+            let html = '<table class="table table-striped">';
+            html += '<thead><tr><th>Trường dữ liệu</th><th>Giá trị</th></tr></thead><tbody>';
+            
+            // Sắp xếp và hiển thị tất cả các trường
+            const sortedKeys = Object.keys(student).sort();
+            sortedKeys.forEach(key => {
+                if (key !== 'prediction' && key !== 'dropout_probability') {
+                    const value = student[key];
+                    if (value !== null && value !== undefined && value !== '') {
+                        html += `<tr>
+                            <td><strong>${key.replace(/_/g, ' ').toUpperCase()}</strong></td>
+                            <td>${value}</td>
+                        </tr>`;
+                    }
+                }
+            });
+            
+            html += '</tbody></table>';
+            fullDetails.innerHTML = html;
+        }
+
+        // Hiển thị lỗi
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('error').style.display = 'block';
+            document.getElementById('errorMessage').textContent = message;
+        }
+
+        // Load dữ liệu khi trang được tải
+        document.addEventListener('DOMContentLoaded', loadStudentDetail);
+    </script>
+</body>
+</html>

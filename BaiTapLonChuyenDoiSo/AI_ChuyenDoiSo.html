@@ -1,0 +1,1661 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Tạo Flashcard & Tóm Tắt Bài Giảng</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.12.313/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.18/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js"></script>
+  <style>
+    /* Vietnamese font optimization */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    
+    body {
+      font-family: 'Inter', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+      font-feature-settings: 'liga' 1, 'kern' 1;
+      text-rendering: optimizeLegibility;
+    }
+    
+    /* Improved animations and styles */
+    .flashcard-container {
+      perspective: 1000px;
+    }
+    .flashcard {
+      transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      transform-style: preserve-3d;
+      position: relative;
+    }
+    .flashcard.flipped {
+      transform: rotateY(180deg);
+    }
+    .flashcard-front, .flashcard-back {
+      backface-visibility: hidden;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+      box-sizing: border-box;
+    }
+    .flashcard-back {
+      transform: rotateY(180deg);
+    }
+    .progress-bar {
+      transition: width 0.3s ease;
+    }
+    
+    /* Enhanced upload area */
+    .file-upload {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .file-upload:hover .file-upload-label {
+      border-color: #6366f1;
+      transform: translateY(-2px);
+    }
+    .file-upload:hover .file-upload-icon {
+      color: #6366f1;
+      transform: scale(1.1);
+    }
+    .file-upload.drag-over {
+      border-color: #6366f1 !important;
+      background: linear-gradient(135deg, #eef2ff 0%, #f3f4f6 100%) !important;
+      transform: scale(1.02);
+    }
+    .file-upload-icon {
+      transition: all 0.3s ease;
+    }
+    
+    /* Improved badges and buttons */
+    .ai-badge {
+      background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);
+      color: white;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      box-shadow: 0 2px 4px rgba(99, 102, 241, 0.2);
+    }
+    
+    .processing-animation {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    
+    .file-item {
+      animation: slideIn 0.3s ease-out;
+    }
+    
+    /* Vietnamese text formatting */
+    .vietnamese-text {
+      font-family: 'Inter', 'Segoe UI', sans-serif;
+      line-height: 1.6;
+      letter-spacing: 0.01em;
+    }
+    
+    .vietnamese-heading {
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+    
+    .vietnamese-body {
+      font-weight: 400;
+      line-height: 1.7;
+    }
+    
+    /* Subtitle styles */
+    .subtitle-container {
+      position: relative;
+      margin-bottom: 1rem;
+    }
+    
+    .subtitle-text {
+      font-size: 0.875rem;
+      color: #6b7280;
+      font-style: italic;
+      margin-top: 0.5rem;
+      padding: 0.5rem;
+      background: #f9fafb;
+      border-left: 3px solid #6366f1;
+      border-radius: 0.375rem;
+    }
+    
+    .subtitle-toggle {
+      position: absolute;
+      top: 0;
+      right: 0;
+      background: #6366f1;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+    
+    .subtitle-toggle:hover {
+      background: #4f46e5;
+      transform: scale(1.1);
+    }
+    
+    /* Text preview improvements */
+    .text-preview {
+      max-height: 200px;
+      overflow-y: auto;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'Inter', monospace;
+      font-size: 14px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    
+    .ocr-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    
+    .ocr-status.processing {
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fbbf24;
+    }
+    
+    .ocr-status.success {
+      background: #d1fae5;
+      color: #065f46;
+      border: 1px solid #10b981;
+    }
+    
+    .ocr-status.error {
+      background: #fee2e2;
+      color: #991b1b;
+      border: 1px solid #f87171;
+    }
+    
+    /* Dark mode support */
+    .dark {
+      background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+    }
+    
+    .dark .bg-white {
+      background-color: #1e293b;
+      color: #f1f5f9;
+    }
+    
+    .dark .text-gray-800 {
+      color: #f1f5f9;
+    }
+    
+    .dark .text-gray-600 {
+      color: #cbd5e1;
+    }
+    
+    /* Responsive improvements */
+    @media (max-width: 768px) {
+      .file-upload {
+        padding: 2rem 1rem;
+      }
+      
+      .file-upload-icon {
+        font-size: 3rem !important;
+      }
+      
+      .flashcard-container {
+        height: 200px;
+      }
+      
+      .vietnamese-text {
+        font-size: 0.9rem;
+      }
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    @keyframes bounce {
+      0%, 20%, 53%, 80%, 100% {
+        transform: translate3d(0,0,0);
+      }
+      40%, 43% {
+        transform: translate3d(0, -8px, 0);
+      }
+      70% {
+        transform: translate3d(0, -4px, 0);
+      }
+      90% {
+        transform: translate3d(0, -2px, 0);
+      }
+    }
+    
+    .bounce-animation {
+      animation: bounce 1s ease-in-out;
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-indigo-50 to-purple-50 min-h-screen font-sans">
+  <div class="container mx-auto px-4 py-8 max-w-6xl">
+    <!-- Header -->
+    <header class="text-center mb-8">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center">
+          <div class="bg-indigo-600 p-3 rounded-xl shadow-lg">
+            <i class="fas fa-brain text-white text-3xl"></i>
+          </div>
+          <div class="ml-4 text-left">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-800 vietnamese-heading">AI Tạo Flashcard & Tóm Tắt Bài Giảng</h1>
+            <div class="flex items-center mt-1">
+              <span class="ai-badge">AI-Powered</span>
+              <span class="ml-2 text-sm text-gray-600 vietnamese-text">Xử lý cục bộ</span>
+            </div>
+          </div>
+        </div>
+        <button id="darkModeToggle" class="p-3 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors">
+          <i class="fas fa-moon text-gray-600"></i>
+        </button>
+      </div>
+      
+      <!-- Subtitle Section -->
+      <div class="subtitle-container">
+        <p class="text-gray-600 max-w-2xl mx-auto vietnamese-body">
+          Tải lên file PDF hoặc hình ảnh để trích xuất văn bản bằng OCR, sau đó tạo flashcard tương tác với câu hỏi và câu trả lời được tạo bởi AI.
+        </p>
+        <button class="subtitle-toggle" id="subtitleToggle" title="Bật/tắt phụ đề">
+          <i class="fas fa-closed-captioning"></i>
+        </button>
+        <div id="subtitleText" class="subtitle-text hidden">
+          <strong>Hướng dẫn sử dụng:</strong><br>
+          • Kéo thả hoặc chọn file PDF/hình ảnh<br>
+          • Hệ thống sẽ tự động trích xuất văn bản<br>
+          • AI phân tích và tạo flashcard thông minh<br>
+          • Xem trước và chỉnh sửa văn bản nếu cần<br>
+          • Xuất file để sử dụng với ứng dụng học tập
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="bg-white rounded-2xl shadow-xl overflow-hidden">
+      <!-- Upload Section -->
+      <div class="p-6 border-b border-gray-200">
+        <div class="file-upload flex flex-col items-center justify-center p-8 border-2 border-dashed border-gray-300 rounded-xl bg-gradient-to-br from-gray-50 to-indigo-50 cursor-pointer transition-all duration-300 hover:shadow-md" id="dropZone">
+          <input type="file" id="fileInput" class="hidden" accept=".pdf,.jpg,.jpeg,.png,.bmp,.txt,.docx" multiple>
+          <div class="file-upload-icon text-indigo-400 mb-4">
+            <i class="fas fa-cloud-upload-alt text-6xl"></i>
+          </div>
+          <label for="fileInput" class="file-upload-label text-center cursor-pointer">
+            <span class="block text-xl font-semibold text-gray-700 mb-2">Kéo thả file vào đây</span>
+            <span class="block text-gray-500 mb-4"> PDF, JPG, PNG, BMP, TXT, DOCX</span>
+            <span class="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl inline-block shadow-md hover:shadow-lg transition-all">
+              <i class="fas fa-folder-open mr-2"></i>Chọn File
+            </span>
+          </label>
+          <p class="mt-4 text-sm text-gray-500">File được xử lý cục bộ trên trình duyệt - không gửi dữ liệu ra ngoài</p>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-3" id="fileList"></div>
+
+        <!-- Text Preview Section -->
+        <div id="textPreviewSection" class="mt-6 hidden">
+          <div class="bg-gray-50 rounded-xl p-4 border border-gray-200">
+            <div class="flex items-center justify-between mb-3">
+              <h3 class="text-lg font-semibold text-gray-800 flex items-center vietnamese-heading">
+                <i class="fas fa-file-text text-indigo-600 mr-2"></i>
+                Xem trước văn bản trích xuất
+              </h3>
+              <div id="ocrStatus" class="ocr-status processing">
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Đang xử lý OCR...</span>
+              </div>
+            </div>
+            <div id="textPreview" class="text-preview vietnamese-text">
+              <!-- Text preview will be inserted here -->
+            </div>
+            <div class="mt-3 flex items-center gap-3 text-sm text-gray-700">
+              <input id="autoCorrectToggle" type="checkbox" class="h-4 w-4 text-indigo-600 border-gray-300 rounded" checked>
+              <label for="autoCorrectToggle" class="select-none">Tự sửa lỗi chính tả (khuyến nghị)</label>
+            </div>
+            <div class="mt-3 flex justify-between items-center text-sm text-gray-600">
+              <span id="textStats" class="vietnamese-text">0 ký tự, 0 từ</span>
+              <div class="flex gap-2 items-center relative">
+                <button id="editTextBtn" class="text-indigo-600 hover:text-indigo-800 font-medium vietnamese-text px-3 py-1 rounded-lg hover:bg-indigo-50 transition-colors">
+                  <i class="fas fa-edit mr-1"></i>Chỉnh sửa văn bản
+                </button>
+                <button id="editActionsBtn" class="text-gray-600 hover:text-gray-800 px-2 py-1 rounded-lg hover:bg-gray-100 transition-colors" title="Tác vụ nhanh">
+                  <i class="fas fa-angle-down"></i>
+                </button>
+                <div id="editActionsMenu" class="hidden absolute right-0 top-full mt-2 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-10">
+                  <div class="py-1 text-sm">
+                    <button data-action="save" class="w-full text-left px-3 py-2 hover:bg-gray-50">💾 Lưu thay đổi</button>
+                    <button data-action="save_generate" class="w-full text-left px-3 py-2 hover:bg-gray-50">⚡ Lưu & Tạo Flashcard</button>
+                    <button data-action="reset" class="w-full text-left px-3 py-2 hover:bg-gray-50">↩️ Khôi phục</button>
+                    <button data-action="cancel" class="w-full text-left px-3 py-2 hover:bg-gray-50">✖️ Hủy</button>
+                    <div class="border-t my-1"></div>
+                    <button data-action="bold" class="w-full text-left px-3 py-2 hover:bg-gray-50">B ⎯ In đậm</button>
+                    <button data-action="italic" class="w-full text-left px-3 py-2 hover:bg-gray-50">I ⎯ In nghiêng</button>
+                    <button data-action="clean" class="w-full text-left px-3 py-2 hover:bg-gray-50">🧹 Làm sạch</button>
+                    <button data-action="auto" class="w-full text-left px-3 py-2 hover:bg-gray-50">✨ Tự động format</button>
+                    <button data-action="find" class="w-full text-left px-3 py-2 hover:bg-gray-50">🔎 Tìm & Thay thế</button>
+                  </div>
+                </div>
+                <button id="quickEditBtn" class="text-green-600 hover:text-green-800 font-medium vietnamese-text px-3 py-1 rounded-lg hover:bg-green-50 transition-colors">
+                  <i class="fas fa-magic mr-1"></i>Chỉnh sửa nhanh
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-6 flex flex-wrap gap-3 justify-center">
+          <button id="generateBtn" class="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center shadow-md hover:shadow-lg vietnamese-text" disabled>
+            <i class="fas fa-sparkles mr-2"></i> Tạo Flashcard
+          </button>
+          <button id="cancelBtn" class="px-6 py-3 border border-gray-300 rounded-xl hover:bg-gray-50 hidden transition-all flex items-center shadow hover:shadow-md vietnamese-text">
+            <i class="fas fa-times mr-2"></i> Hủy
+          </button>
+          <button id="downloadBtn" class="px-6 py-3 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-xl hover:from-green-700 hover:to-emerald-700 hidden transition-all flex items-center shadow-md hover:shadow-lg vietnamese-text">
+            <i class="fas fa-download mr-2"></i> Tải xuống CSV
+          </button>
+          <button id="exportAnkiBtn" class="px-6 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 text-white rounded-xl hover:from-blue-700 hover:to-cyan-700 hidden transition-all flex items-center shadow-md hover:shadow-lg vietnamese-text">
+            <i class="fas fa-file-export mr-2"></i> Xuất Anki
+          </button>
+        </div>
+
+        <div class="mt-6 max-w-2xl mx-auto">
+          <div class="flex justify-between text-sm text-gray-600 mb-2">
+            <span>Tiến trình xử lý</span>
+            <span id="progressText">0%</span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-3">
+            <div id="progressBar" class="progress-bar bg-gradient-to-r from-indigo-500 to-purple-500 h-3 rounded-full" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <div id="statusMessage" class="mt-4 text-center text-sm"></div>
+      </div>
+
+      <!-- Results Section -->
+      <div id="resultsSection" class="hidden p-6">
+        <div class="flex flex-wrap justify-between items-center mb-6">
+          <h2 class="text-2xl font-bold text-gray-800 flex items-center">
+            <i class="fas fa-layer-group text-indigo-600 mr-3"></i>Flashcard đã tạo
+          </h2>
+          <div class="flex items-center space-x-3 mt-4 sm:mt-0">
+            <span id="cardCount" class="text-sm bg-indigo-100 text-indigo-800 px-4 py-2 rounded-full font-medium">? thẻ</span>
+            <button id="toggleViewBtn" class="px-4 py-2 text-sm bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors flex items-center">
+              <i class="fas fa-th-list mr-2"></i> Danh sách
+            </button>
+          </div>
+        </div>
+
+        <!-- Grid View -->
+        <div id="gridView" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <!-- Flashcards will be inserted here -->
+        </div>
+
+        <!-- List View (hidden by default) -->
+        <div id="listView" class="hidden">
+          <div class="overflow-x-auto rounded-xl border border-gray-200">
+            <table class="min-w-full divide-y divide-gray-200">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
+                  <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Câu hỏi</th>
+                  <th scope="col" class="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Câu trả lời</th>
+                </tr>
+              </thead>
+              <tbody id="listViewContent" class="bg-white divide-y divide-gray-200">
+                <!-- List items will be inserted here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Features Section -->
+    <section class="mt-12 bg-white rounded-2xl shadow-lg p-6">
+      <h2 class="text-2xl font-bold text-center text-gray-800 mb-8">Cách thức hoạt động</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="bg-gradient-to-br from-indigo-50 to-purple-50 p-6 rounded-xl border border-indigo-100">
+          <div class="w-12 h-12 rounded-full bg-indigo-100 flex items-center justify-center mb-4">
+            <i class="fas fa-upload text-indigo-600"></i>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-800 mb-2">1. Tải lên tài liệu</h3>
+          <p class="text-gray-600">Tải lên file PDF hoặc hình ảnh chứa nội dung bạn muốn chuyển đổi thành flashcard.</p>
+        </div>
+        <div class="bg-gradient-to-br from-purple-50 to-pink-50 p-6 rounded-xl border border-purple-100">
+          <div class="w-12 h-12 rounded-full bg-purple-100 flex items-center justify-center mb-4">
+            <i class="fas fa-robot text-purple-600"></i>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-800 mb-2">2. Xử lý bằng AI</h3>
+          <p class="text-gray-600">AI phân tích nội dung và tạo các cặp câu hỏi-câu trả lời.</p>
+        </div>
+        <div class="bg-gradient-to-br from-pink-50 to-rose-50 p-6 rounded-xl border border-pink-100">
+          <div class="w-12 h-12 rounded-full bg-pink-100 flex items-center justify-center mb-4">
+            <i class="fas fa-graduation-cap text-pink-600"></i>
+          </div>
+          <h3 class="text-lg font-semibold text-gray-800 mb-2">3. Học tập & Xuất file</h3>
+          <p class="text-gray-600">Xem lại flashcard và tải xuống dưới dạng CSV để sử dụng với các ứng dụng học tập.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="mt-12 text-center text-gray-600">
+      <div class="flex flex-col md:flex-row justify-center items-center space-y-2 md:space-y-0 md:space-x-6 mb-4">
+        <p class="flex items-center">
+          <i class="fas fa-shield-alt text-green-500 mr-2"></i>Bảo mật hàng đầu
+        </p>
+        <p class="flex items-center">
+          <i class="fas fa-bolt text-yellow-500 mr-2"></i>Tốc độ nhanh
+        </p>
+        <p class="flex items-center">
+          <i class="fas fa-sync-alt text-blue-500 mr-2"></i>Xử lý cục bộ
+        </p>
+      </div>
+      <p class="text-sm">© 2025 AI Tạo Flashcard & Tóm Tắt Bài Giảng _ Nhóm 12 _ CNTT1703.</p>
+    </footer>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // DOM Elements
+      const fileInput = document.getElementById('fileInput');
+      const dropZone = document.getElementById('dropZone');
+      const fileList = document.getElementById('fileList');
+      const generateBtn = document.getElementById('generateBtn');
+      const cancelBtn = document.getElementById('cancelBtn');
+      const downloadBtn = document.getElementById('downloadBtn');
+      const exportAnkiBtn = document.getElementById('exportAnkiBtn');
+      const progressBar = document.getElementById('progressBar');
+      const progressText = document.getElementById('progressText');
+      const statusMessage = document.getElementById('statusMessage');
+      const resultsSection = document.getElementById('resultsSection');
+      const gridView = document.getElementById('gridView');
+      const listView = document.getElementById('listView');
+      const listViewContent = document.getElementById('listViewContent');
+      const cardCount = document.getElementById('cardCount');
+      const toggleViewBtn = document.getElementById('toggleViewBtn');
+      const darkModeToggle = document.getElementById('darkModeToggle');
+      const subtitleToggle = document.getElementById('subtitleToggle');
+      const subtitleText = document.getElementById('subtitleText');
+      const textPreviewSection = document.getElementById('textPreviewSection');
+      const textPreview = document.getElementById('textPreview');
+      const textStats = document.getElementById('textStats');
+      const ocrStatus = document.getElementById('ocrStatus');
+      const editTextBtn = document.getElementById('editTextBtn');
+      const quickEditBtn = document.getElementById('quickEditBtn');
+      const editActionsBtn = document.getElementById('editActionsBtn');
+      const editActionsMenu = document.getElementById('editActionsMenu');
+
+      // State
+      let selectedFiles = [];
+      let flashcards = [];
+      let isGridView = true;
+      let abortController = null;
+      let extractedText = '';
+      let isDarkMode = false;
+      let isSubtitleVisible = false;
+
+      // Event Listeners
+      fileInput.addEventListener('change', handleFileSelect);
+      dropZone.addEventListener('click', () => fileInput.click());
+      dropZone.addEventListener('dragover', handleDragOver);
+      dropZone.addEventListener('dragleave', handleDragLeave);
+      dropZone.addEventListener('drop', handleDrop);
+      generateBtn.addEventListener('click', startProcessing);
+      cancelBtn.addEventListener('click', cancelProcessing);
+      downloadBtn.addEventListener('click', downloadCSV);
+      exportAnkiBtn.addEventListener('click', exportAnki);
+      toggleViewBtn.addEventListener('click', toggleView);
+      darkModeToggle.addEventListener('click', toggleDarkMode);
+      subtitleToggle.addEventListener('click', toggleSubtitle);
+      editTextBtn.addEventListener('click', editText);
+      quickEditBtn.addEventListener('click', quickEdit);
+      if (editActionsBtn) {
+        editActionsBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleEditActionsMenu();
+        });
+      }
+      document.addEventListener('click', (e) => {
+        if (!editActionsMenu) return;
+        const clickInsideMenu = editActionsMenu.contains(e.target);
+        const clickOnButton = editActionsBtn && editActionsBtn.contains(e.target);
+        if (!clickInsideMenu && !clickOnButton) {
+          editActionsMenu.classList.add('hidden');
+        }
+      });
+
+      // Functions
+      function handleFileSelect(e) {
+        const files = Array.from(e.target.files);
+        if (files.length > 0) {
+          selectedFiles = files;
+          updateFileList();
+          generateBtn.disabled = false;
+        }
+      }
+
+      function handleDragOver(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add('border-indigo-500', 'bg-indigo-100');
+      }
+
+      function handleDragLeave(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove('border-indigo-500', 'bg-indigo-100');
+      }
+
+      function handleDrop(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove('border-indigo-500', 'bg-indigo-100');
+
+        const files = Array.from(e.dataTransfer.files);
+        const validFiles = files.filter(file => {
+          const ext = file.name.split('.').pop().toLowerCase();
+          return ['pdf', 'jpg', 'jpeg', 'png', 'bmp'].includes(ext);
+        });
+
+        if (validFiles.length > 0) {
+          selectedFiles = validFiles;
+          fileInput.files = e.dataTransfer.files;
+          updateFileList();
+          generateBtn.disabled = false;
+        } else {
+          showStatus('Vui lòng tải lên file PDF hoặc hình ảnh', 'error');
+        }
+      }
+
+      function updateFileList() {
+        fileList.innerHTML = '';
+        selectedFiles.forEach((file, index) => {
+          const fileItem = document.createElement('div');
+          fileItem.className = 'flex items-center bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl px-4 py-3 shadow-sm file-item';
+          fileItem.innerHTML = `
+            <i class="fas ${getFileIcon(file.name)} text-indigo-500 mr-3"></i>
+            <span class="text-sm truncate max-w-xs">${file.name}</span>
+            <button class="ml-2 text-gray-400 hover:text-gray-600" data-index="${index}">
+              <i class="fas fa-times-circle"></i>
+            </button>
+          `;
+          fileList.appendChild(fileItem);
+        });
+
+        // Add event listeners to remove buttons
+        document.querySelectorAll('#fileList button').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const index = parseInt(e.currentTarget.getAttribute('data-index'));
+            selectedFiles.splice(index, 1);
+
+            // Update the file input (a bit hacky since we can't directly set files)
+            const dataTransfer = new DataTransfer();
+            selectedFiles.forEach(file => dataTransfer.items.add(file));
+            fileInput.files = dataTransfer.files;
+
+            updateFileList();
+            generateBtn.disabled = selectedFiles.length === 0;
+          });
+        });
+      }
+
+      function getFileIcon(filename) {
+        const ext = filename.split('.').pop().toLowerCase();
+        switch (ext) {
+          case 'pdf': return 'fa-file-pdf';
+          case 'jpg':
+          case 'jpeg':
+          case 'png':
+          case 'bmp': return 'fa-file-image';
+          case 'txt': return 'fa-file-lines';
+          case 'docx': return 'fa-file-word';
+          default: return 'fa-file';
+        }
+      }
+
+      async function startProcessing() {
+        if (selectedFiles.length === 0) return;
+
+        // Reset state
+        flashcards = [];
+        extractedText = '';
+        gridView.innerHTML = '';
+        listViewContent.innerHTML = '';
+        updateProgress(0);
+        showStatus('Đang xử lý file...', 'info');
+
+        // Show processing UI
+        generateBtn.disabled = true;
+        cancelBtn.classList.remove('hidden');
+        textPreviewSection.classList.remove('hidden');
+        abortController = new AbortController();
+
+        try {
+          let allText = '';
+
+          // Process each file
+          for (let i = 0; i < selectedFiles.length; i++) {
+            const file = selectedFiles[i];
+            updateProgress((i / selectedFiles.length) * 40);
+            showStatus(`Đang xử lý file ${i+1}/${selectedFiles.length}: ${file.name}`, 'info');
+
+            // Detect by MIME or extension for better coverage
+            const ext = (file.name.split('.').pop() || '').toLowerCase();
+            if (file.type === 'application/pdf' || ext === 'pdf') {
+              // Process PDF
+              const pdfText = await extractTextFromPDF(file);
+              allText += pdfText + '\n\n';
+            } else if (file.type.startsWith('image/') || ['jpg','jpeg','png','bmp','gif','webp'].includes(ext)) {
+              // Process image with OCR
+              showStatus(`Đang xử lý hình ảnh ${i+1}/${selectedFiles.length} bằng OCR...`, 'info');
+              ocrStatus.className = 'ocr-status processing';
+              ocrStatus.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Đang xử lý OCR...</span>';
+              
+              const { data: { text } } = await Tesseract.recognize(file, 'vie+eng', {
+                logger: m => {
+                  if (m.status === 'recognizing text') {
+                    const progress = 40 + (m.progress * 30);
+                    updateProgress(progress);
+                    ocrStatus.innerHTML = `<i class="fas fa-spinner fa-spin"></i><span>OCR: ${Math.round(m.progress * 100)}%</span>`;
+                  }
+                }
+              });
+              allText += text + '\n\n';
+            } else if (ext === 'txt' || file.type === 'text/plain') {
+              const text = await extractTextFromTXT(file);
+              allText += text + '\n\n';
+            } else if (ext === 'docx' || file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+              const text = await extractTextFromDOCX(file);
+              allText += text + '\n\n';
+            }
+          }
+
+          // Auto-correct spelling if enabled
+          const autoCorrect = document.getElementById('autoCorrectToggle');
+          extractedText = autoCorrect && autoCorrect.checked ? autoCorrectVietnameseText(allText) : allText;
+          updateTextPreview(extractedText);
+          ocrStatus.className = 'ocr-status success';
+          ocrStatus.innerHTML = '<i class="fas fa-check"></i><span>Hoàn thành OCR</span>';
+
+          // Generate flashcards from extracted text
+          updateProgress(80);
+          showStatus('Đang tạo flashcard thông minh...', 'info');
+          flashcards = generateFlashcardsFromText(extractedText);
+
+          if (flashcards.length === 0) {
+            showStatus('Không tạo được flashcard nào. Vui lòng thử với nội dung khác.', 'warning');
+          } else {
+            showStatus(`Đã tạo thành công ${flashcards.length} flashcard!`, 'success');
+          }
+
+          renderFlashcards();
+          resultsSection.classList.remove('hidden');
+          downloadBtn.classList.remove('hidden');
+          exportAnkiBtn.classList.remove('hidden');
+          updateProgress(100);
+        } catch (error) {
+          if (error.name === 'AbortError') {
+            showStatus('Đã hủy xử lý', 'warning');
+          } else {
+            showStatus(`Lỗi: ${error.message}`, 'error');
+            ocrStatus.className = 'ocr-status error';
+            ocrStatus.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>Lỗi xử lý</span>';
+            console.error('Lỗi xử lý:', error);
+          }
+        } finally {
+          generateBtn.disabled = false;
+          cancelBtn.classList.add('hidden');
+        }
+      }
+
+      async function extractTextFromPDF(pdfFile) {
+        // Initialize PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.12.313/pdf.worker.min.js';
+
+        const arrayBuffer = await pdfFile.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+        let text = '';
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          const strings = content.items.map(item => item.str);
+          text += strings.join(' ') + '\n';
+        }
+
+        return text;
+      }
+
+      async function extractTextFromTXT(file) {
+        const text = await file.text();
+        return text;
+      }
+
+      async function extractTextFromDOCX(file) {
+        const arrayBuffer = await file.arrayBuffer();
+        const result = await window.mammoth.extractRawText({ arrayBuffer });
+        return result.value || '';
+      }
+
+      function autoCorrectVietnameseText(text) {
+        if (!text) return '';
+        let t = text;
+        // Normalize whitespace
+        t = t.replace(/\u00A0/g, ' ');
+        t = t.replace(/\s+\n/g, '\n');
+        t = t.replace(/\n{3,}/g, '\n\n');
+        t = t.replace(/\s{2,}/g, ' ');
+        // Fix OCR common mistakes
+        t = t.replace(/\|(?!\|)/g, 'I');
+        t = t.replace(/(?<=\b)[0](?=\w)/g, 'O');
+        t = t.replace(/(?<=\b)[1](?=\w)/g, 'l');
+        // Fix punctuation spacing
+        t = t.replace(/\s+([.,!?;:])/g, '$1');
+        t = t.replace(/([.,!?;:])\s*(\S)/g, '$1 $2');
+        // Ensure sentence capitalization (basic)
+        t = t.replace(/(^|[.!?]\s+)([a-zà-ỹ])/g, (m, p1, p2) => p1 + p2.toUpperCase());
+        return t.trim();
+      }
+
+      function generateFlashcardsFromText(text) {
+        const candidates = [];
+        
+        // Clean and normalize Vietnamese text
+        let cleanText = text
+          .replace(/\r\n/g, '\n')
+          .replace(/\r/g, '\n')
+          .replace(/\t/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        
+        // Split into paragraphs and filter empty ones
+        const paragraphs = cleanText.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+
+        paragraphs.forEach((paragraph, paraIndex) => {
+          const cleanParagraph = paragraph.replace(/\s+/g, ' ').trim();
+          const sentences = cleanParagraph.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 0);
+
+          // Create more meaningful flashcards based on content structure
+          for (let i = 0; i < sentences.length; i++) {
+            const sentence = sentences[i].trim();
+            if (sentence.split(' ').length < 5) continue;
+
+            // Pattern 1: Definition/Explanation in Vietnamese
+            const definitionMatch = sentence.match(/([^.!?]+)\s+(là|gồm|bao gồm|có nghĩa là|được định nghĩa là|được hiểu là)\s+([^.!?]+)/i);
+            if (definitionMatch) {
+              const term = definitionMatch[1].trim();
+              const definition = definitionMatch[3].replace(/[.!?]$/, '').trim();
+              
+              candidates.push({ score: 0,
+                question: `"${term}" là gì theo nội dung bài học?`,
+                answer: definition,
+                source: `Đoạn ${paraIndex+1}`
+              });
+              continue;
+            }
+
+            // Pattern 2: Cause and Effect in Vietnamese
+            const causeEffectMatch = sentence.match(/([^.!?]+)\s+(vì|do|bởi vì|nhờ|từ đó|dẫn đến)\s+([^.!?]+)/i);
+            if (causeEffectMatch) {
+              const cause = causeEffectMatch[1].trim();
+              const effect = causeEffectMatch[3].replace(/[.!?]$/, '').trim();
+              
+              candidates.push({ score: 0,
+                question: `Nguyên nhân nào dẫn đến "${cause}"?`,
+                answer: effect,
+                source: `Đoạn ${paraIndex+1}`
+              });
+              
+              candidates.push({ score: 0,
+                question: `Kết quả của "${effect}" là gì?`,
+                answer: cause,
+                source: `Đoạn ${paraIndex+1}`
+              });
+              continue;
+            }
+
+            // Pattern 3: Process/Sequence in Vietnamese
+            const processMatch = sentence.match(/(đầu tiên|tiếp theo|sau đó|cuối cùng|bước\s*\d+|đầu tiên|tiếp theo|cuối cùng)\s*,?\s*(.+)/i);
+            if (processMatch && i > 0) {
+              const step = processMatch[1];
+              const action = processMatch[2].replace(/[.!?]$/, '').trim();
+              const previousAction = sentences[i-1].substring(0, 50) + (sentences[i-1].length > 50 ? '...' : '');
+
+              candidates.push({ score: 0,
+                question: `Trong quy trình, "${step.replace(/bước\s*/i, 'bước ')}" là gì?`,
+                answer: action,
+                source: `Đoạn ${paraIndex+1}`
+              });
+
+              candidates.push({ score: 0,
+                question: `Trước khi "${action.substring(0, 30) + (action.length > 30 ? '...' : '')}" là bước nào?`,
+                answer: previousAction,
+                source: `Đoạn ${paraIndex+1}`
+              });
+              continue;
+            }
+
+            // Pattern 4: Comparison in Vietnamese
+            const comparisonMatch = sentence.match(/([^.!?]+)\s+(hơn|kém|tốt hơn|tồi tệ hơn|nhiều hơn|ít hơn)\s+([^.!?]+)\s+(so với|hơn)\s+([^.!?]+)/i);
+            if (comparisonMatch) {
+              const subject = comparisonMatch[1].trim();
+              const comparison = comparisonMatch[2];
+              const object = comparisonMatch[5].replace(/[.!?]$/, '').trim();
+
+              candidates.push({ score: 0,
+                question: `So sánh giữa "${subject}" và "${object}" như thế nào?`,
+                answer: `${subject} ${comparison} ${object}`,
+                source: `Đoạn ${paraIndex+1}`
+              });
+              continue;
+            }
+
+            // Pattern 5: List/Enumeration in Vietnamese
+            const listEnumMatch = sentence.match(/([^.!?]+)\s+(gồm|bao gồm|gồm có|gồm các)\s+([^.!?]+)/i);
+            if (listEnumMatch) {
+              const subject = listEnumMatch[1].trim();
+              const items = listEnumMatch[3].replace(/[.!?]$/, '').trim();
+
+              candidates.push({ score: 0,
+                question: `"${subject}" bao gồm những gì?`,
+                answer: items,
+                source: `Đoạn ${paraIndex+1}`
+              });
+              continue;
+            }
+
+            // Pattern 6: Purpose/Function in Vietnamese
+            const purposeMatch = sentence.match(/([^.!?]+)\s+(để|nhằm|với mục đích|giúp)\s+([^.!?]+)/i);
+            if (purposeMatch) {
+              const action = purposeMatch[1].trim();
+              const purpose = purposeMatch[3].replace(/[.!?]$/, '').trim();
+
+              candidates.push({ score: 0,
+                question: `Mục đích của "${action}" là gì?`,
+                answer: purpose,
+                source: `Đoạn ${paraIndex+1}`
+              });
+              continue;
+            }
+
+            // Pattern 7: Important Facts (Dates, Numbers, Proper Nouns)
+            const dateMatch = sentence.match(/(\b(1\d{3}|20[0-2]\d)\b)/);
+            if (dateMatch) {
+              const date = dateMatch[1];
+              candidates.push({ score: 0,
+                question: `Sự kiện quan trọng nào xảy ra vào năm ${date} theo nội dung?`,
+                answer: sentence,
+                source: `Đoạn ${paraIndex+1}`
+              });
+            }
+
+            const percentageMatch = sentence.match(/(\b\d+%)\b/);
+            if (percentageMatch) {
+              const percentage = percentageMatch[1];
+              candidates.push({ score: 0,
+                question: `Con số ${percentage} thể hiện điều gì trong nội dung?`,
+                answer: sentence,
+                source: `Đoạn ${paraIndex+1}`
+              });
+            }
+
+            // Pattern 8: Vietnamese proper nouns and terms
+            const vietnameseTermMatch = sentence.match(/([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+(?:\s+[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+)*)/);
+            if (vietnameseTermMatch && i > 0) {
+              const term = vietnameseTermMatch[1];
+              if (!['The', 'This', 'That', 'These', 'Those', 'Có', 'Các', 'Một', 'Hai', 'Ba', 'Bốn', 'Năm', 'Sáu', 'Bảy', 'Tám', 'Chín', 'Mười'].includes(term)) {
+                candidates.push({ score: 0,
+                  question: `Nội dung cung cấp thông tin gì về "${term}"?`,
+                  answer: sentence,
+                  source: `Đoạn ${paraIndex+1}`
+                });
+              }
+            }
+
+            // Pattern 9: Mathematical expressions and formulas
+            const mathMatch = sentence.match(/([a-zA-Z]\s*[=+\-*/]\s*[a-zA-Z0-9]+)/);
+            if (mathMatch) {
+              const formula = mathMatch[1];
+              candidates.push({ score: 0,
+                question: `Công thức "${formula}" có ý nghĩa gì trong nội dung?`,
+                answer: sentence,
+                source: `Đoạn ${paraIndex+1}`
+              });
+            }
+
+            // Pattern 10: Lists and enumerations
+            const listMatch = sentence.match(/(\d+\.\s*[^.!?]+)/);
+            if (listMatch) {
+              const listItem = listMatch[1];
+              candidates.push({ score: 0,
+                question: `Mục "${listItem}" trong danh sách có ý nghĩa gì?`,
+                answer: sentence,
+                source: `Đoạn ${paraIndex+1}`
+              });
+            }
+          }
+
+          // Create summary flashcards for longer paragraphs
+          if (sentences.length > 3) {
+            const firstSentence = sentences[0];
+            const lastSentence = sentences[sentences.length - 1];
+
+            // Extract main subject from first sentence
+            const subjectMatch = firstSentence.match(/^([A-Z][a-z]+(?:\s+[A-Za-z]+)*)/);
+            if (subjectMatch) {
+              const subject = subjectMatch[1];
+              candidates.push({ score: 0,
+                question: `Ý chính về "${subject}" trong đoạn này là gì?`,
+                answer: cleanText,
+                source: `Đoạn ${paraIndex+1} (Tóm tắt)`
+              });
+            } else {
+              candidates.push({ score: 0,
+                question: `Nội dung chính của đoạn này là gì?`,
+                answer: `${firstSentence} ... ${lastSentence}`,
+                source: `Đoạn ${paraIndex+1} (Tóm tắt)`
+              });
+            }
+          }
+        });
+
+        // Score and deduplicate
+        const seen = new Set();
+        for (const c of candidates) {
+          let score = 0;
+          // Longer answers often more informative
+          score += Math.min(30, (c.answer || '').length / 5);
+          // Reward diverse question starters
+          if (/^\".+\" là gì/i.test(c.question)) score += 10;
+          if (/^Nguyên nhân/i.test(c.question)) score += 12;
+          if (/^Kết quả/i.test(c.question)) score += 12;
+          if (/^Trong quy trình/i.test(c.question)) score += 10;
+          if (/^So sánh/i.test(c.question)) score += 10;
+          if (/^Mục đích/i.test(c.question)) score += 10;
+          if (/^Sự kiện/i.test(c.question)) score += 8;
+          if (/^Con số/i.test(c.question)) score += 8;
+          c.score = score;
+        }
+
+        // Sort by score desc
+        candidates.sort((a,b) => b.score - a.score);
+
+        // Deduplicate and take top N (e.g., 60)
+        const top = [];
+        for (const c of candidates) {
+          const id = `${c.question}|${c.answer}`;
+          if (!seen.has(id)) {
+            seen.add(id);
+            top.push({ question: c.question, answer: c.answer, source: c.source });
+          }
+          if (top.length >= 60) break;
+        }
+
+        return top;
+      }
+
+      function cancelProcessing() {
+        if (abortController) {
+          abortController.abort();
+          showStatus('Đã hủy xử lý', 'warning');
+        }
+        resetProcessingUI();
+      }
+
+      function resetProcessingUI() {
+        generateBtn.disabled = false;
+        cancelBtn.classList.add('hidden');
+        abortController = null;
+      }
+
+      function updateProgress(percent) {
+        progressBar.style.width = `${percent}%`;
+        progressText.textContent = `${Math.round(percent)}%`;
+      }
+
+      function showStatus(message, type) {
+        statusMessage.textContent = message;
+        statusMessage.className = 'mt-3 text-sm text-center';
+
+        switch (type) {
+          case 'error':
+            statusMessage.classList.add('text-red-600');
+            break;
+          case 'success':
+            statusMessage.classList.add('text-green-600');
+            break;
+          case 'warning':
+            statusMessage.classList.add('text-yellow-600');
+            break;
+          default:
+            statusMessage.classList.add('text-indigo-600');
+        }
+      }
+
+      function renderFlashcards() {
+        // Update count
+        cardCount.textContent = `${flashcards.length} ${flashcards.length === 1 ? 'thẻ' : 'thẻ'}`;
+
+        // Grid View
+        gridView.innerHTML = '';
+        flashcards.forEach((card, index) => {
+          const cardElement = document.createElement('div');
+          cardElement.className = 'flashcard-container h-64';
+          cardElement.innerHTML = `
+            <div class="flashcard w-full h-full relative rounded-2xl shadow-lg cursor-pointer border border-gray-100 hover:shadow-xl transition-all duration-300">
+              <div class="flashcard-front bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl p-5 flex flex-col">
+                <div class="flex justify-between items-start mb-3">
+                  <div class="text-xs bg-indigo-100 text-indigo-800 rounded-full px-3 py-1 font-medium shadow-sm">Q${index + 1}</div>
+                  <div class="text-xs text-gray-500 bg-white bg-opacity-50 rounded-full px-2 py-1">${card.source}</div>
+                </div>
+                <div class="font-medium text-gray-800 flex-grow flex items-center text-center leading-relaxed vietnamese-text">${card.question}</div>
+                <div class="text-xs text-gray-500 mt-3 flex items-center justify-center vietnamese-text">
+                  <i class="fas fa-hand-pointer mr-1"></i>Nhấn để xem đáp án
+                </div>
+              </div>
+              <div class="flashcard-back bg-white rounded-2xl p-5 flex flex-col border-2 border-indigo-100 shadow-lg">
+                <div class="flex justify-between items-start mb-3">
+                  <div class="text-xs bg-green-100 text-green-800 rounded-full px-3 py-1 font-medium shadow-sm">Đáp án</div>
+                  <div class="text-xs text-gray-500 bg-gray-100 bg-opacity-50 rounded-full px-2 py-1">${card.source}</div>
+                </div>
+                <div class="text-gray-700 flex-grow flex items-center text-center leading-relaxed vietnamese-text">${card.answer}</div>
+                <div class="text-xs text-gray-500 mt-3 flex items-center justify-center vietnamese-text">
+                  <i class="fas fa-undo mr-1"></i>Nhấn để xem câu hỏi
+                </div>
+              </div>
+            </div>
+          `;
+
+          // Add click event to flip card
+          const flashcard = cardElement.querySelector('.flashcard');
+          flashcard.addEventListener('click', () => {
+            flashcard.classList.toggle('flipped');
+          });
+
+          gridView.appendChild(cardElement);
+        });
+
+        // List View
+        listViewContent.innerHTML = '';
+        flashcards.forEach((card, index) => {
+          const row = document.createElement('tr');
+          row.className = 'hover:bg-gray-50';
+          row.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${index + 1}</td>
+            <td class="px-6 py-4 text-sm text-gray-700 max-w-xs">${card.question}</td>
+            <td class="px-6 py-4 text-sm text-gray-700 max-w-xs">${card.answer}</td>
+          `;
+          listViewContent.appendChild(row);
+        });
+      }
+
+      function toggleView() {
+        isGridView = !isGridView;
+
+        if (isGridView) {
+          gridView.classList.remove('hidden');
+          listView.classList.add('hidden');
+          toggleViewBtn.innerHTML = '<i class="fas fa-th-list mr-2"></i> Danh sách';
+        } else {
+          gridView.classList.add('hidden');
+          listView.classList.remove('hidden');
+          toggleViewBtn.innerHTML = '<i class="fas fa-th-large mr-2"></i> Danh sách';
+        }
+      }
+
+      function downloadCSV() {
+        if (flashcards.length === 0) return;
+
+        let csvContent = "Câu hỏi,Câu trả lời\n";
+        flashcards.forEach(card => {
+          csvContent += `"${card.question.replace(/"/g, '""')}","${card.answer.replace(/"/g, '""')}"\n`;
+        });
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'flashcards.csv');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      function exportAnki() {
+        if (flashcards.length === 0) return;
+
+        // Create Anki-compatible format
+        let ankiContent = '';
+        flashcards.forEach(card => {
+          ankiContent += `${card.question}\t${card.answer}\n`;
+        });
+
+        const blob = new Blob([ankiContent], { type: 'text/plain;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.setAttribute('href', url);
+        link.setAttribute('download', 'flashcards_anki.txt');
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showStatus('Đã xuất file Anki thành công!', 'success');
+      }
+
+      function toggleDarkMode() {
+        isDarkMode = !isDarkMode;
+        document.body.classList.toggle('dark', isDarkMode);
+        
+        const icon = darkModeToggle.querySelector('i');
+        if (isDarkMode) {
+          icon.className = 'fas fa-sun text-yellow-500';
+          darkModeToggle.className = 'p-3 rounded-xl bg-gray-800 hover:bg-gray-700 transition-colors';
+        } else {
+          icon.className = 'fas fa-moon text-gray-600';
+          darkModeToggle.className = 'p-3 rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors';
+        }
+      }
+
+      function toggleSubtitle() {
+        isSubtitleVisible = !isSubtitleVisible;
+        subtitleText.classList.toggle('hidden', !isSubtitleVisible);
+        
+        const icon = subtitleToggle.querySelector('i');
+        if (isSubtitleVisible) {
+          icon.className = 'fas fa-eye-slash';
+          subtitleToggle.title = 'Tắt phụ đề';
+        } else {
+          icon.className = 'fas fa-closed-captioning';
+          subtitleToggle.title = 'Bật phụ đề';
+        }
+      }
+
+      function editText() {
+        const textarea = document.createElement('textarea');
+        textarea.value = extractedText;
+        textarea.className = 'w-full h-64 p-4 border border-gray-300 rounded-lg font-mono text-sm resize-none vietnamese-text';
+        textarea.placeholder = 'Chỉnh sửa văn bản trích xuất...';
+        textarea.id = 'editTextarea';
+        
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50';
+        modal.innerHTML = `
+          <div class="bg-white rounded-xl p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-lg font-semibold vietnamese-heading">Chỉnh sửa văn bản</h3>
+              <button class="text-gray-500 hover:text-gray-700" onclick="closeEditModal(this.closest('.fixed'))">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+            
+            <!-- Text editing toolbar -->
+            <div class="mb-4 p-3 bg-gray-50 rounded-lg border">
+              <div class="flex flex-wrap gap-2 items-center">
+                <span class="text-sm font-medium text-gray-700 vietnamese-text">Công cụ:</span>
+                <button class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 vietnamese-text" onclick="formatText('bold')">
+                  <i class="fas fa-bold mr-1"></i>In đậm
+                </button>
+                <button class="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200 vietnamese-text" onclick="formatText('italic')">
+                  <i class="fas fa-italic mr-1"></i>In nghiêng
+                </button>
+                <button class="px-3 py-1 text-xs bg-green-100 text-green-700 rounded hover:bg-green-200 vietnamese-text" onclick="cleanText()">
+                  <i class="fas fa-broom mr-1"></i>Làm sạch
+                </button>
+                <button class="px-3 py-1 text-xs bg-purple-100 text-purple-700 rounded hover:bg-purple-200 vietnamese-text" onclick="autoFormat()">
+                  <i class="fas fa-magic mr-1"></i>Tự động format
+                </button>
+                <button class="px-3 py-1 text-xs bg-orange-100 text-orange-700 rounded hover:bg-orange-200 vietnamese-text" onclick="findReplace()">
+                  <i class="fas fa-search mr-1"></i>Tìm & Thay thế
+                </button>
+              </div>
+              <div class="mt-2 text-xs text-gray-500">
+                Phím tắt: Ctrl+B (Đậm), Ctrl+I (Nghiêng), Ctrl+Shift+L (Làm sạch), Ctrl+Shift+F (Tự động format), Ctrl+F (Tìm & Thay thế), Ctrl+S (Lưu), Ctrl+Enter (Lưu & Tạo), Esc (Hủy)
+              </div>
+            </div>
+            
+            <div class="mb-4">
+              ${textarea.outerHTML}
+            </div>
+            
+            <!-- Text statistics -->
+            <div class="mb-4 p-3 bg-gray-50 rounded-lg border">
+              <div class="flex flex-wrap gap-4 text-sm text-gray-600">
+                <span id="editStats" class="vietnamese-text">0 ký tự, 0 từ, 0 dòng</span>
+                <span id="editTime" class="vietnamese-text">Thời gian chỉnh sửa: 0 phút</span>
+              </div>
+            </div>
+            
+            <div class="flex justify-between items-center">
+              <div class="flex gap-2">
+                <button class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 vietnamese-text" onclick="resetText()">
+                  <i class="fas fa-undo mr-1"></i>Khôi phục
+                </button>
+                <button class="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 vietnamese-text" onclick="closeEditModal(this.closest('.fixed'))">
+                  Hủy
+                </button>
+              </div>
+              <div class="flex gap-2">
+                <button class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 vietnamese-text" onclick="saveAndGenerate()">
+                  <i class="fas fa-save mr-1"></i>Lưu & Tạo Flashcard
+                </button>
+                <button class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 vietnamese-text" onclick="saveEditedText(this)">
+                  <i class="fas fa-check mr-1"></i>Lưu thay đổi
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Focus on textarea and update stats
+        setTimeout(() => {
+          const textarea = modal.querySelector('textarea');
+          textarea.focus();
+          updateEditStats();
+          
+          // Add event listener for real-time stats
+          textarea.addEventListener('input', updateEditStats);
+        }, 100);
+
+        // Attach edit hotkeys
+        attachEditHotkeys(modal);
+      }
+
+      function saveEditedText(button) {
+        const modal = button.closest('.fixed');
+        const textarea = modal.querySelector('textarea');
+        extractedText = textarea.value;
+        updateTextPreview(extractedText);
+        closeEditModal(modal);
+        showStatus('Đã cập nhật văn bản thành công!', 'success');
+      }
+
+      function updateTextPreview(text) {
+        textPreview.textContent = text;
+        const charCount = text.length;
+        const wordCount = text.trim().split(/\s+/).filter(word => word.length > 0).length;
+        textStats.textContent = `${charCount} ký tự, ${wordCount} từ`;
+      }
+
+      function toggleEditActionsMenu() {
+        if (!editActionsMenu) return;
+        editActionsMenu.classList.toggle('hidden');
+        if (!editActionsMenu.classList.contains('hidden')) {
+          // Wire up quick action buttons to open edit modal then perform action
+          const attach = (selector, fn) => {
+            const btn = editActionsMenu.querySelector(selector);
+            if (!btn) return;
+            btn.onclick = async () => {
+              editActionsMenu.classList.add('hidden');
+              // Ensure modal open
+              if (!document.getElementById('editTextarea')) {
+                editText();
+                await new Promise(r => setTimeout(r, 120));
+              }
+              // Map action
+              const action = btn.getAttribute('data-action');
+              switch (action) {
+                case 'save': {
+                  const btnSave = document.querySelector('.fixed .bg-indigo-600');
+                  if (btnSave) btnSave.click();
+                  break;
+                }
+                case 'save_generate': {
+                  saveAndGenerate();
+                  break;
+                }
+                case 'reset': {
+                  resetText();
+                  break;
+                }
+                case 'cancel': {
+                  const modal = document.querySelector('.fixed.inset-0');
+                  if (modal) closeEditModal(modal);
+                  break;
+                }
+                case 'bold': {
+                  formatText('bold');
+                  break;
+                }
+                case 'italic': {
+                  formatText('italic');
+                  break;
+                }
+                case 'clean': {
+                  cleanText();
+                  break;
+                }
+                case 'auto': {
+                  autoFormat();
+                  break;
+                }
+                case 'find': {
+                  findReplace();
+                  break;
+                }
+              }
+            };
+          };
+          attach('button[data-action="save"]');
+          attach('button[data-action="save_generate"]');
+          attach('button[data-action="reset"]');
+          attach('button[data-action="cancel"]');
+          attach('button[data-action="bold"]');
+          attach('button[data-action="italic"]');
+          attach('button[data-action="clean"]');
+          attach('button[data-action="auto"]');
+          attach('button[data-action="find"]');
+        }
+      }
+
+      // Text editing functions
+      function updateEditStats() {
+        const textarea = document.getElementById('editTextarea');
+        if (!textarea) return;
+        
+        const text = textarea.value;
+        const charCount = text.length;
+        const wordCount = text.trim().split(/\s+/).filter(word => word.length > 0).length;
+        const lineCount = text.split('\n').length;
+        
+        const statsElement = document.getElementById('editStats');
+        if (statsElement) {
+          statsElement.textContent = `${charCount} ký tự, ${wordCount} từ, ${lineCount} dòng`;
+        }
+      }
+
+      function formatText(type) {
+        const textarea = document.getElementById('editTextarea');
+        if (!textarea) return;
+        
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const selectedText = textarea.value.substring(start, end);
+        
+        if (selectedText.length === 0) {
+          showStatus('Vui lòng chọn văn bản để format', 'warning');
+          return;
+        }
+        
+        let formattedText = '';
+        switch (type) {
+          case 'bold':
+            formattedText = `**${selectedText}**`;
+            break;
+          case 'italic':
+            formattedText = `*${selectedText}*`;
+            break;
+        }
+        
+        textarea.value = textarea.value.substring(0, start) + formattedText + textarea.value.substring(end);
+        textarea.setSelectionRange(start + 2, start + 2 + selectedText.length);
+        textarea.focus();
+        updateEditStats();
+      }
+
+      function cleanText() {
+        const textarea = document.getElementById('editTextarea');
+        if (!textarea) return;
+        
+        let text = textarea.value;
+        
+        // Remove extra whitespace
+        text = text.replace(/\s+/g, ' ');
+        
+        // Remove extra line breaks
+        text = text.replace(/\n\s*\n\s*\n/g, '\n\n');
+        
+        // Fix common OCR errors
+        text = text.replace(/[|]/g, 'I'); // Fix common OCR mistake
+        text = text.replace(/[0]/g, 'O'); // Fix common OCR mistake
+        text = text.replace(/[1]/g, 'l'); // Fix common OCR mistake
+        
+        // Capitalize sentences
+        text = text.replace(/(^|\.\s+)([a-z])/g, (match, p1, p2) => p1 + p2.toUpperCase());
+        
+        textarea.value = text;
+        updateEditStats();
+        showStatus('Đã làm sạch văn bản thành công!', 'success');
+      }
+
+      function autoFormat() {
+        const textarea = document.getElementById('editTextarea');
+        if (!textarea) return;
+        
+        let text = textarea.value;
+        
+        // Auto-format paragraphs
+        text = text.replace(/\n\s*\n/g, '\n\n'); // Normalize paragraph breaks
+        
+        // Auto-capitalize proper nouns (Vietnamese)
+        const vietnameseNames = text.match(/[A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ][a-zàáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]+/g);
+        if (vietnameseNames) {
+          vietnameseNames.forEach(name => {
+            const capitalized = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+            text = text.replace(new RegExp(name, 'g'), capitalized);
+          });
+        }
+        
+        // Fix spacing around punctuation
+        text = text.replace(/\s+([.,!?;:])/g, '$1');
+        text = text.replace(/([.,!?;:])\s*([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ])/g, '$1 $2');
+        
+        textarea.value = text;
+        updateEditStats();
+        showStatus('Đã tự động format văn bản!', 'success');
+      }
+
+      function findReplace() {
+        const findText = prompt('Nhập từ cần tìm:');
+        if (!findText) return;
+        
+        const replaceText = prompt('Nhập từ thay thế:');
+        if (replaceText === null) return;
+        
+        const textarea = document.getElementById('editTextarea');
+        if (!textarea) return;
+        
+        const text = textarea.value;
+        const newText = text.replace(new RegExp(findText, 'gi'), replaceText);
+        
+        if (newText === text) {
+          showStatus('Không tìm thấy từ cần thay thế', 'warning');
+        } else {
+          textarea.value = newText;
+          updateEditStats();
+          showStatus(`Đã thay thế ${(text.match(new RegExp(findText, 'gi')) || []).length} lần xuất hiện`, 'success');
+        }
+      }
+
+      function resetText() {
+        if (confirm('Bạn có chắc muốn khôi phục văn bản gốc?')) {
+          const textarea = document.getElementById('editTextarea');
+          if (textarea) {
+            textarea.value = extractedText;
+            updateEditStats();
+            showStatus('Đã khôi phục văn bản gốc', 'success');
+          }
+        }
+      }
+
+      function saveAndGenerate() {
+        const textarea = document.getElementById('editTextarea');
+        if (textarea) {
+          const modal = textarea.closest('.fixed');
+          extractedText = textarea.value;
+          updateTextPreview(extractedText);
+          closeEditModal(modal);
+          showStatus('Đã lưu văn bản và bắt đầu tạo flashcard!', 'success');
+          
+          // Auto-generate flashcards
+          setTimeout(() => {
+            flashcards = generateFlashcardsFromText(extractedText);
+            if (flashcards.length > 0) {
+              renderFlashcards();
+              resultsSection.classList.remove('hidden');
+              downloadBtn.classList.remove('hidden');
+              exportAnkiBtn.classList.remove('hidden');
+              showStatus(`Đã tạo thành công ${flashcards.length} flashcard!`, 'success');
+            } else {
+              showStatus('Không tạo được flashcard nào từ văn bản đã chỉnh sửa', 'warning');
+            }
+          }, 500);
+        }
+      }
+
+      function attachEditHotkeys(modal) {
+        // Remove existing handler if any
+        if (window.__editHotkeysHandler) {
+          document.removeEventListener('keydown', window.__editHotkeysHandler);
+        }
+        window.__editHotkeysHandler = function(e) {
+          const textarea = document.getElementById('editTextarea');
+          const isInModal = !!(modal && document.body.contains(modal));
+          if (!isInModal) return;
+          // Only handle when textarea or modal active
+          const isCtrl = e.ctrlKey || e.metaKey;
+          if (e.key === 'Escape') {
+            e.preventDefault();
+            closeEditModal(modal);
+            return;
+          }
+          if (isCtrl && e.key.toLowerCase() === 's') {
+            e.preventDefault();
+            const btn = modal.querySelector('button.bg-indigo-600');
+            if (btn) saveEditedText(btn);
+            return;
+          }
+          if (isCtrl && e.key === 'Enter') {
+            e.preventDefault();
+            saveAndGenerate();
+            return;
+          }
+          if (isCtrl && e.key.toLowerCase() === 'b') {
+            e.preventDefault();
+            formatText('bold');
+            return;
+          }
+          if (isCtrl && e.key.toLowerCase() === 'i') {
+            e.preventDefault();
+            formatText('italic');
+            return;
+          }
+          if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'l') {
+            e.preventDefault();
+            cleanText();
+            return;
+          }
+          if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'f') {
+            e.preventDefault();
+            autoFormat();
+            return;
+          }
+          if (isCtrl && !e.shiftKey && e.key.toLowerCase() === 'f') {
+            // Override browser find when modal open
+            e.preventDefault();
+            findReplace();
+            return;
+          }
+        };
+        document.addEventListener('keydown', window.__editHotkeysHandler);
+      }
+
+      function closeEditModal(modal) {
+        if (window.__editHotkeysHandler) {
+          document.removeEventListener('keydown', window.__editHotkeysHandler);
+          window.__editHotkeysHandler = null;
+        }
+        if (modal && modal.parentNode) {
+          modal.parentNode.removeChild(modal);
+        }
+      }
+
+      function quickEdit() {
+        if (!extractedText) {
+          showStatus('Không có văn bản để chỉnh sửa', 'warning');
+          return;
+        }
+
+        showStatus('Đang thực hiện chỉnh sửa nhanh...', 'info');
+        
+        // Apply quick fixes
+        let improvedText = extractedText;
+        
+        // Fix common OCR errors
+        improvedText = improvedText.replace(/[|]/g, 'I');
+        improvedText = improvedText.replace(/[0]/g, 'O');
+        improvedText = improvedText.replace(/[1]/g, 'l');
+        
+        // Remove extra whitespace
+        improvedText = improvedText.replace(/\s+/g, ' ');
+        
+        // Fix spacing around punctuation
+        improvedText = improvedText.replace(/\s+([.,!?;:])/g, '$1');
+        improvedText = improvedText.replace(/([.,!?;:])\s*([A-ZÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ])/g, '$1 $2');
+        
+        // Capitalize sentences
+        improvedText = improvedText.replace(/(^|\.\s+)([a-z])/g, (match, p1, p2) => p1 + p2.toUpperCase());
+        
+        // Update the text
+        extractedText = improvedText;
+        updateTextPreview(extractedText);
+        
+        showStatus('Đã hoàn thành chỉnh sửa nhanh!', 'success');
+      }
+
+      // Global hotkey for Quick Edit (Ctrl+Shift+Q)
+      document.addEventListener('keydown', (e) => {
+        const isCtrl = e.ctrlKey || e.metaKey;
+        if (isCtrl && e.shiftKey && e.key.toLowerCase() === 'q') {
+          // Avoid triggering inside edit modal hotkeys context
+          const modalOpen = !!document.querySelector('.fixed.inset-0');
+          if (!modalOpen) {
+            e.preventDefault();
+            quickEdit();
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>
